@@ -46,6 +46,19 @@
         return COUPON_MESSAGES[msg] || (msg ? msg : 'Cupom invalido.');
     }
 
+    var PAYMENT_STATUS_LABELS = {
+        PENDING: 'Aguardando pagamento',
+        CONFIRMED: 'Pagamento confirmado',
+        RECEIVED: 'Pagamento recebido',
+        OVERDUE: 'Pagamento vencido',
+        REFUNDED: 'Pagamento estornado',
+        CANCELLED: 'Pagamento cancelado'
+    };
+
+    function translatePaymentStatus(status) {
+        return PAYMENT_STATUS_LABELS[status] || status || 'Desconhecido';
+    }
+
     function bindCheckoutPage() {
         var page = document.querySelector('.tt-checkout-page');
         if (!page) { return; }
@@ -71,6 +84,12 @@
         var couponMessage     = document.querySelector('#tt-coupon-message');
         var paymentExtra      = document.querySelector('#tt-payment-extra');
         var passengersList    = document.querySelector('#tt-passengers-list');
+        var pixBox            = document.querySelector('#tt-pix-box');
+        var pixImage          = document.querySelector('#tt-pix-image');
+        var pixPayload        = document.querySelector('#tt-pix-payload');
+        var pixExpiration     = document.querySelector('#tt-pix-expiration');
+        var pixStatus         = document.querySelector('#tt-pix-status');
+        var copyPixButton     = document.querySelector('#tt-copy-pix');
 
         // Get authenticated user data
         var authUser = window.AuthStorage.getUser() || {};
@@ -81,7 +100,8 @@
             couponCode:  '',
             couponData:  null,   // full payload from /api/coupons/validate when valid=true
             paymentMethod: 'PIX',
-            authToken:   window.AuthStorage.getToken()
+            authToken:   window.AuthStorage.getToken(),
+            pixPollingTimer: null
         };
 
         // Pre-fill customer data from auth
@@ -129,6 +149,7 @@
         function updateCardFieldsVisibility() {
             if (shouldShowCardFields()) {
                 cardFields.classList.remove('hidden');
+                if (pixBox) { pixBox.classList.add('hidden'); }
             } else {
                 cardFields.classList.add('hidden');
             }
@@ -301,10 +322,13 @@
 
         // --- Card ---
         function collectCardData() {
+            var month = (document.querySelector('#tt-card-expiry-month') && document.querySelector('#tt-card-expiry-month').value || '').trim();
+            var year = (document.querySelector('#tt-card-expiry-year') && document.querySelector('#tt-card-expiry-year').value || '').trim();
+            var fallbackExpiry = (document.querySelector('#tt-card-expiry') && document.querySelector('#tt-card-expiry').value || '').trim();
             return {
                 holderName: (document.querySelector('#tt-card-holder').value || '').trim(),
                 number:     (document.querySelector('#tt-card-number').value || '').trim(),
-                expiry:     (document.querySelector('#tt-card-expiry').value || '').trim(),
+                expiry:     (month && year) ? (month + '/' + year) : fallbackExpiry,
                 cvv:        (document.querySelector('#tt-card-cvv').value || '').trim()
             };
         }
@@ -333,6 +357,83 @@
                 headers: buildFetchHeaders(),
                 body:    JSON.stringify(payload)
             }).then(function (r) { return r.json().catch(function () { return {}; }); });
+        }
+
+        function payWithPix(bookingId) {
+            var cpfCnpj = (document.querySelector('#tt-cpf-cnpj') && document.querySelector('#tt-cpf-cnpj').value || '').replace(/\D/g, '');
+            if (!cpfCnpj) {
+                return Promise.reject(new Error('CPF/CNPJ do pagador e obrigatorio para PIX.'));
+            }
+
+            return fetch('/api/payments/booking/' + encodeURIComponent(String(bookingId)) + '/pix', {
+                method: 'POST',
+                headers: buildFetchHeaders(),
+                body: JSON.stringify({ cpfCnpj: cpfCnpj })
+            }).then(function (r) {
+                return r.json().catch(function () { return {}; }).then(function (json) {
+                    return {
+                        ok: r.ok,
+                        status: r.status,
+                        message: json.message || '',
+                        payload: json && json.data !== undefined ? json.data : json
+                    };
+                });
+            });
+        }
+
+        function renderPix(payload) {
+            if (!pixBox) { return; }
+            pixBox.classList.remove('hidden');
+
+            var encoded = payload.pixEncodedImage || payload.encodedImage || '';
+            if (encoded && pixImage) {
+                pixImage.src = encoded.indexOf('data:image') === 0 ? encoded : 'data:image/png;base64,' + encoded;
+                pixImage.classList.remove('hidden');
+            }
+
+            if (pixPayload) {
+                pixPayload.value = payload.pixPayload || payload.payload || '';
+            }
+            if (pixExpiration) {
+                pixExpiration.textContent = payload.pixExpirationDate || payload.expirationDate || '-';
+            }
+            if (pixStatus) {
+                pixStatus.textContent = translatePaymentStatus(payload.status || 'PENDING');
+            }
+        }
+
+        function stopPixPolling() {
+            if (state.pixPollingTimer) {
+                clearInterval(state.pixPollingTimer);
+                state.pixPollingTimer = null;
+            }
+        }
+
+        function startPixPolling(bookingId) {
+            stopPixPolling();
+            state.pixPollingTimer = setInterval(function () {
+                fetch('/api/payments/booking/' + encodeURIComponent(String(bookingId)), {
+                    method: 'GET',
+                    headers: buildFetchHeaders()
+                })
+                    .then(function (r) { return r.json().catch(function () { return {}; }); })
+                    .then(function (json) {
+                        var payload = json && json.data !== undefined ? json.data : json;
+                        var status = payload && payload.status ? payload.status : 'PENDING';
+
+                        if (pixStatus) {
+                            pixStatus.textContent = translatePaymentStatus(status);
+                        }
+
+                        if (status === 'CONFIRMED' || status === 'RECEIVED') {
+                            stopPixPolling();
+                            showMessage(checkoutFeedback, 'Pagamento PIX confirmado com sucesso!', false);
+                        }
+                    })
+                    .catch(function () {
+                        // Keep polling despite transient errors.
+                    });
+            }, 5000);
         }
 
         // --- Submit ---
@@ -395,29 +496,38 @@
                     var bookingId = pickFirst(payload.id, payload.bookingId);
                     if (!bookingId) { throw new Error('Reserva criada sem ID. Contate o suporte.'); }
 
+                    if (state.paymentMethod === 'PIX') {
+                        return payWithPix(bookingId).then(function (paymentResult) {
+                            return { bookingId: bookingId, paymentResult: paymentResult, isPix: true };
+                        });
+                    }
+
                     return finalizePayment(bookingId, totals).then(function (paymentResult) {
-                        return { bookingId: bookingId, paymentResult: paymentResult };
+                        return { bookingId: bookingId, paymentResult: paymentResult, isPix: false };
                     });
                 })
                 .then(function (result) {
+                    var paymentPayload = result.paymentResult && result.paymentResult.payload !== undefined
+                        ? result.paymentResult.payload
+                        : (result.paymentResult && result.paymentResult.data !== undefined
+                            ? result.paymentResult.data
+                            : result.paymentResult);
+
+                    if (result.isPix) {
+                        if (!result.paymentResult.ok) {
+                            throw new Error(result.paymentResult.message || 'Falha ao gerar PIX para a reserva.');
+                        }
+
+                        renderPix(paymentPayload || {});
+                        startPixPolling(result.bookingId);
+                        showMessage(checkoutFeedback, 'QR Code PIX gerado com sucesso! Reserva #' + result.bookingId + '.', false);
+                        return;
+                    }
+
                     showMessage(checkoutFeedback, 'Compra realizada com sucesso! Reserva #' + result.bookingId + '.', false);
                     form.reset();
                     rebuildPassengers(1);
                     removeCoupon();
-
-                    var paymentPayload = result.paymentResult && result.paymentResult.data !== undefined
-                        ? result.paymentResult.data : result.paymentResult;
-
-                    if (state.paymentMethod === 'PIX') {
-                        var pixCode = pickFirst(
-                            paymentPayload && paymentPayload.pixCode,
-                            paymentPayload && paymentPayload.qrCode,
-                            paymentPayload && paymentPayload.pix && paymentPayload.pix.code
-                        );
-                        paymentExtra.textContent = pixCode
-                            ? 'Codigo Pix: ' + pixCode
-                            : 'Pagamento Pix iniciado. Confira o codigo no seu app bancario.';
-                    }
                 })
                 .catch(function (err) {
                     var msg = (err && err.message) ? err.message : 'Nao foi possivel finalizar a compra. Tente novamente.';
@@ -451,6 +561,20 @@
 
         couponButton.addEventListener('click', applyCoupon);
         if (removeCouponButton) { removeCouponButton.addEventListener('click', removeCoupon); }
+        if (copyPixButton) {
+            copyPixButton.addEventListener('click', function () {
+                if (!pixPayload || !pixPayload.value) {
+                    return;
+                }
+                navigator.clipboard.writeText(pixPayload.value)
+                    .then(function () {
+                        showMessage(checkoutFeedback, 'Codigo PIX copiado com sucesso.', false);
+                    })
+                    .catch(function () {
+                        showMessage(checkoutFeedback, 'Nao foi possivel copiar automaticamente.', true);
+                    });
+            });
+        }
         form.addEventListener('submit', submitCheckout);
 
         updateCardFieldsVisibility();
