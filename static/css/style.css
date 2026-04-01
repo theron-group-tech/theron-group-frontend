@@ -673,6 +673,7 @@ h1, h2, h3, h4, h5, h6 {
     font-weight: 600;
     transition: var(--transition-normal);
     width: 100%;
+    margin-top: auto;
 }
 
 .btn-card:hover {
@@ -1532,12 +1533,209 @@ h1, h2, h3, h4, h5, h6 {
     }
 }
 
+@keyframes heroFadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(40px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes shimmer {
+    0% {
+        background-position: -200% center;
+    }
+    100% {
+        background-position: 200% center;
+    }
+}
+
+@keyframes ripple {
+    to {
+        transform: scale(4);
+        opacity: 0;
+    }
+}
+
+@keyframes countUp {
+    from {
+        opacity: 0;
+        transform: scale(0.5);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
 .animate-fadeInUp {
     animation: fadeInUp 0.8s ease forwards;
 }
 
 .animate-float {
     animation: float 3s ease infinite;
+}
+
+/* ===== HERO TEXT SEQUENTIAL ANIMATION ===== */
+.hero-content .hero-tagline {
+    opacity: 0;
+    animation: heroFadeIn 0.8s ease forwards;
+    animation-delay: 0.2s;
+}
+
+.hero-content .hero-title {
+    opacity: 0;
+    animation: heroFadeIn 0.8s ease forwards;
+    animation-delay: 0.5s;
+}
+
+.hero-content .hero-description {
+    opacity: 0;
+    animation: heroFadeIn 0.8s ease forwards;
+    animation-delay: 0.8s;
+}
+
+.hero-content .hero-buttons {
+    opacity: 0;
+    animation: heroFadeIn 0.8s ease forwards;
+    animation-delay: 1.1s;
+}
+
+/* ===== PARALLAX HERO ===== */
+.hero-section::before {
+    transition: transform 0.1s linear;
+    will-change: transform;
+}
+
+/* ===== SECTION DIVIDERS ===== */
+.section-divider {
+    position: relative;
+    overflow: hidden;
+}
+
+.section-divider::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    height: 80px;
+    background: linear-gradient(to bottom, transparent, var(--anti-flash-white));
+    pointer-events: none;
+}
+
+.section-divider-reverse::after {
+    background: linear-gradient(to bottom, transparent, var(--white));
+}
+
+/* Alternating section backgrounds */
+.companies-section {
+    background-color: var(--white);
+}
+
+.contact-section {
+    background-color: var(--anti-flash-white);
+}
+
+/* ===== ENHANCED CARD HOVER (GOLDEN GLOW) ===== */
+.company-card,
+.service-card,
+.plan-card,
+.package-card {
+    transition: all 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+}
+
+.company-card:hover,
+.service-card:hover {
+    transform: translateY(-10px);
+    box-shadow: 0 20px 40px rgba(204, 160, 0, 0.15), 0 0 20px rgba(204, 160, 0, 0.08);
+    border-color: rgba(204, 160, 0, 0.3);
+}
+
+.company-card::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    border-radius: 8px;
+    opacity: 0;
+    transition: opacity 0.4s ease;
+    pointer-events: none;
+    box-shadow: inset 0 0 30px rgba(204, 160, 0, 0.05);
+}
+
+.company-card:hover::after {
+    opacity: 1;
+}
+
+/* ===== BUTTON RIPPLE EFFECT ===== */
+.btn,
+.btn-card,
+.btn-service,
+.btn-plan,
+.btn-package {
+    position: relative;
+    overflow: hidden;
+}
+
+.btn .ripple,
+.btn-card .ripple,
+.btn-service .ripple,
+.btn-plan .ripple,
+.btn-package .ripple {
+    position: absolute;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.4);
+    transform: scale(0);
+    animation: ripple 0.6s linear;
+    pointer-events: none;
+}
+
+/* Button shimmer on hover */
+.btn-primary::after,
+.btn-card::after,
+.btn-fale-conosco::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(
+        90deg,
+        transparent 0%,
+        rgba(255, 255, 255, 0.2) 50%,
+        transparent 100%
+    );
+    background-size: 200% 100%;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
+.btn-primary:hover::after,
+.btn-card:hover::after,
+.btn-fale-conosco:hover::after {
+    opacity: 1;
+    animation: shimmer 1.5s infinite;
+}
+
+/* ===== STAT COUNTER ANIMATION ===== */
+.stat-number {
+    transition: all 0.3s ease;
+}
+
+.stat-number.counted {
+    animation: countUp 0.6s ease forwards;
+}
+
+.stat-item:hover .stat-number {
+    transform: scale(1.15);
+    text-shadow: 0 0 20px rgba(204, 160, 0, 0.3);
 }
 
 /* ===== RESPONSIVIDADE ===== */

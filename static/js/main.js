@@ -150,17 +150,30 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
     
-    // Animate elements on scroll
+    // Animate elements on scroll (STAGGERED)
     const animateOnScroll = function() {
         const elements = document.querySelectorAll('.company-card, .service-card, .plan-card, .package-card');
         
-        elements.forEach(element => {
+        elements.forEach((element, index) => {
             const elementPosition = element.getBoundingClientRect().top;
             const screenPosition = window.innerHeight / 1.2;
             
-            if (elementPosition < screenPosition) {
+            if (elementPosition < screenPosition && !element.classList.contains('animated')) {
+                // Staggered delay based on position within visible group
+                const parent = element.parentElement;
+                const siblings = Array.from(parent.children).filter(el => 
+                    el.classList.contains('company-card') || 
+                    el.classList.contains('service-card') || 
+                    el.classList.contains('plan-card') || 
+                    el.classList.contains('package-card')
+                );
+                const siblingIndex = siblings.indexOf(element);
+                const delay = siblingIndex * 0.15;
+                
+                element.style.transitionDelay = delay + 's';
                 element.style.opacity = '1';
                 element.style.transform = 'translateY(0)';
+                element.classList.add('animated');
             }
         });
     };
@@ -175,4 +188,95 @@ document.addEventListener('DOMContentLoaded', function() {
     
     window.addEventListener('scroll', animateOnScroll);
     animateOnScroll();
+
+    // ===== ANIMATED COUNTER FOR STATS =====
+    const animateCounters = function() {
+        const statNumbers = document.querySelectorAll('.stat-number');
+        
+        statNumbers.forEach(stat => {
+            if (stat.classList.contains('counted')) return;
+            
+            const rect = stat.getBoundingClientRect();
+            if (rect.top < window.innerHeight && rect.bottom > 0) {
+                stat.classList.add('counted');
+                
+                const text = stat.textContent.trim();
+                // Extract number and suffix (e.g., "39+" -> 39, "+")
+                const match = text.match(/^(\d+)(.*)$/);
+                if (match) {
+                    const target = parseInt(match[1]);
+                    const suffix = match[2] || '';
+                    const duration = 2000;
+                    const startTime = performance.now();
+                    
+                    const updateCounter = (currentTime) => {
+                        const elapsed = currentTime - startTime;
+                        const progress = Math.min(elapsed / duration, 1);
+                        
+                        // Ease out cubic
+                        const eased = 1 - Math.pow(1 - progress, 3);
+                        const current = Math.floor(eased * target);
+                        
+                        stat.textContent = current + suffix;
+                        
+                        if (progress < 1) {
+                            requestAnimationFrame(updateCounter);
+                        } else {
+                            stat.textContent = target + suffix;
+                        }
+                    };
+                    
+                    requestAnimationFrame(updateCounter);
+                }
+            }
+        });
+    };
+    
+    window.addEventListener('scroll', animateCounters);
+    animateCounters();
+
+    // ===== PARALLAX EFFECT ON HERO =====
+    const heroSection = document.querySelector('.hero-section');
+    if (heroSection) {
+        window.addEventListener('scroll', function() {
+            const scrolled = window.pageYOffset;
+            const heroHeight = heroSection.offsetHeight;
+            
+            if (scrolled < heroHeight) {
+                const heroBg = heroSection.querySelector('::before') || heroSection;
+                heroSection.style.setProperty('--parallax-offset', (scrolled * 0.4) + 'px');
+            }
+        });
+        
+        // Apply parallax via CSS custom property
+        const style = document.createElement('style');
+        style.textContent = `
+            .hero-section::before {
+                transform: translateY(var(--parallax-offset, 0));
+            }
+        `;
+        document.head.appendChild(style);
+    }
+
+    // ===== BUTTON RIPPLE EFFECT =====
+    const rippleButtons = document.querySelectorAll('.btn, .btn-card, .btn-service, .btn-plan, .btn-package');
+    rippleButtons.forEach(button => {
+        button.addEventListener('click', function(e) {
+            const ripple = document.createElement('span');
+            ripple.classList.add('ripple');
+            
+            const rect = this.getBoundingClientRect();
+            const size = Math.max(rect.width, rect.height);
+            
+            ripple.style.width = ripple.style.height = size + 'px';
+            ripple.style.left = (e.clientX - rect.left - size / 2) + 'px';
+            ripple.style.top = (e.clientY - rect.top - size / 2) + 'px';
+            
+            this.appendChild(ripple);
+            
+            ripple.addEventListener('animationend', function() {
+                ripple.remove();
+            });
+        });
+    });
 });
